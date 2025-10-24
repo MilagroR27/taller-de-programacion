@@ -1,0 +1,1 @@
+#Se ingresan N valores numéricos. Se desea saber cuántos son positivos, cuantos negativos y cuantos iguales a cero. 
