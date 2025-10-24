@@ -11,4 +11,6 @@ for i in range(N):
         cont_p +=1
     else:
         cont_n +=1
-
+print("La cantidad de ceros: ", cont_c)
+print("La cantidad de positivos: ", cont_p)
+print("La cantidad de negativos: ", cont_n)
