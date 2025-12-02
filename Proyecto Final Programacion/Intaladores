@@ -1,2 +1,4 @@
 #pip install streamlit
 #Para iniciar streamlit python -m streamlit run app.py
+#pip install PySide6 (Eso te permitirá: Crear interfaces en Qt Designer → exportarlas como .ui y
+Cargarlas desde Python → añadir funcionalidad, conectar con SQLite, etc.)

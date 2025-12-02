@@ -1,0 +1,1204 @@
+# 1. VISIÓN GENERAL DEL PROYECTO
+
+**Idea general**
+
+> App de escritorio para la institución, hecha en Python + SQLite, con interfaz gráfica, que permita a la preceptora y a los profesores gestionar la información académica de los alumnos: datos personales, asistencias, notas, materias correlativas, estado académico (debe materias, libre, en standby), y altas/bajas de alumnos. Con login diferenciado (preceptora vs profesor).
+
+**Tecnologías elegidas (propuesta)**
+
+* **Lenguaje:** Python
+* **Base de datos:** SQLite (archivo `.db` local, simple y perfecto para apps chicas)
+* **Interfaz gráfica (GUI):**
+
+  * Opción recomendada: **PySide6 (Qt para Python) + Qt Designer**
+
+    * Qt Designer: programa donde dibujás la interfaz arrastrando botones, cuadros de texto, etc.
+    * PySide6: librería de Python que usa esos diseños.
+  * Alternativa: Tkinter (más simple, menos lindo).
+
+---
+
+# 2. ACTORES Y ROLES DEL SISTEMA
+
+## 2.1. Preceptora
+
+**Qué hace la preceptora en la app:**
+
+* Gestionar alumnos:
+
+  * Dar **alta** (nuevo alumno).
+  * Dar **baja administrativa** (pasar a estado STANDBY cuando deja la carrera, pero sin borrarlo).
+  * Modificar datos (cambio de apellido, legajo, etc.).
+* Ver información global:
+
+  * Listado de todos los alumnos.
+  * Para cada alumno:
+
+    * Asistencias totales.
+    * Asistencias por materia.
+    * Notas por materia.
+    * Si debe materias.
+    * Si quedó libre en alguna materia.
+* Gestionar materias y correlatividades (opcionalmente):
+
+  * Crear materias.
+  * Definir qué materia es correlativa de cuál.
+* Gestionar usuarios (opcional):
+
+  * Crear usuario para cada profesor.
+  * Resetear contraseña.
+
+**Ejemplo**
+
+La preceptora quiere saber si “Juan Pérez” puede inscribirse a “Programación II”.
+
+* Ve sus materias: ve que “Programación I” está aprobada.
+* Ve correlativas de Programación II: requiere Programación I aprobada.
+* Entonces lo puede inscribir sin problema.
+
+---
+
+## 2.2. Profesor
+
+**Qué hace el profesor en la app:**
+
+* Iniciar sesión con su usuario.
+* Ver solo sus materias.
+* Para cada materia:
+
+  * Ver listado de alumnos inscriptos.
+  * Registrar asistencias por clase.
+  * Cargar notas por evaluación (Parcial 1, Parcial 2, etc.).
+  * Ver resumen de la materia:
+
+    * Promedios, cuántos libres, cuántos regularizados, etc. (esto podría ser versión 2).
+
+**Ejemplo**
+
+El profesor de “Estructura de Datos” entra a la app:
+
+* Ve “Mis materias”: Estructura de Datos A, Estructura de Datos B.
+* Selecciona Estructura de Datos A → ve los alumnos.
+* Marca presentes/ausentes, y carga la nota del primer parcial.
+
+---
+
+# 3. REQUISITOS FUNCIONALES (QUÉ TIENE QUE HACER)
+
+### 3.1. Gestión de alumnos
+
+El sistema debe permitir:
+
+1. Registrar un nuevo alumno con sus datos:
+
+   * Nombre, apellido, DNI, legajo, carrera, etc.
+2. Modificar datos de un alumno existente.
+3. Cambiar el estado del alumno:
+
+   * ACTIVO: cursando normalmente.
+   * STANDBY: dejó la carrera, pero se conserva el historial (no se borra).
+   * (Opcional) EGRESADO: terminó la carrera.
+4. Consultar el resumen académico de un alumno:
+
+   * Materias que cursa/cursó.
+   * Notas.
+   * Asistencias totales y por materia.
+   * Si debe materias.
+   * Si quedó libre en alguna.
+
+---
+
+### 3.2. Gestión de materias y correlatividades
+
+El sistema debe permitir:
+
+1. Registrar nuevas materias:
+
+   * Nombre, año, carrera.
+2. Definir correlatividades:
+
+   * Ej: Programación II correlativa de Programación I (APROBADA).
+3. Consultar para una materia:
+
+   * Qué correlativas tiene.
+   * Qué alumnos están inscriptos.
+
+**Ejemplo**
+
+* Programación I (id_materia=10)
+* Programación II (id_materia=20)
+
+Correlatividad:
+
+> Programación II requiere Programación I aprobada.
+
+Esto se guarda como una fila en la tabla de correlativas.
+
+---
+
+### 3.3. Inscripción alumno–materia (cursadas)
+
+El sistema debe permitir:
+
+1. Inscribir un alumno a una materia (si cumple las correlativas).
+2. Ver en qué materias está inscripto un alumno.
+3. Cambiar el estado de la cursada:
+
+   * CURSANDO
+   * REGULAR
+   * LIBRE
+   * PROMOCIONADA
+   * APROBADA
+
+**Ejemplo**
+
+Ana López:
+
+* Cursa Programación I (estado: CURSANDO).
+* Cursa Matemática I (estado: REGULAR).
+* Debe Algoritmos I (estado: APROBADA pero sin final, según cómo lo definan).
+
+---
+
+### 3.4. Asistencias
+
+El sistema debe permitir:
+
+1. Registrar asistencia para un grupo (materia + fecha):
+
+   * Profesor selecciona materia + fecha.
+   * Ve la lista de alumnos.
+   * Marca PRESENTE / AUSENTE / JUSTIFICADO.
+2. Ver el historial de asistencias de un alumno:
+
+   * Por materia.
+   * Total.
+3. Calcular si un alumno **quedó libre** en una materia según regla de negocio.
+
+**Ejemplo de regla**
+
+* Si el alumno tiene más del 25% de inasistencias sobre las clases dictadas → queda libre.
+  (Este número lo podés definir en el proyecto)
+
+---
+
+### 3.5. Notas
+
+El sistema debe permitir:
+
+1. Registrar notas:
+
+   * Seleccionar materia y alumno.
+   * Seleccionar tipo de evaluación (Parcial1, Parcial2, Final, etc.)
+   * Ingresar nota y fecha.
+2. Ver las notas de un alumno por materia.
+3. Determinar si el alumno:
+
+   * Aprobó la cursada.
+   * Promocionó.
+   * Debe la materia (no aprobó).
+
+**Ejemplo de regla**
+
+* Aprobó la cursada: promedio de parciales ≥ 6.
+* Promocionó: promedio ≥ 8 y todas las notas ≥ 7.
+* Debe la materia: no cumplió las condiciones.
+
+(Estos criterios los fijás vos en el proyecto.)
+
+---
+
+### 3.6. Estado académico del alumno
+
+El sistema debe:
+
+1. Mostrar si el alumno **debe materias**:
+
+   * Materia donde la cursada no está aprobada o el final no está aprobado.
+2. Mostrar si el alumno **quedó libre** en alguna materia.
+3. Mostrar si el alumno está:
+
+   * ACTIVO
+   * STANDBY
+   * (Opcional) EGRESADO
+
+---
+
+### 3.7. Login y roles
+
+El sistema debe:
+
+1. Tener una pantalla de login:
+
+   * Usuario
+   * Contraseña
+2. Validar las credenciales contra la tabla de usuarios.
+3. Asignar el rol:
+
+   * PRECEPTOR → abre panel de preceptora.
+   * PROFESOR → abre panel de profesor.
+4. (Opcional) Cerrar sesión.
+
+---
+
+# 4. REQUISITOS NO FUNCIONALES (CÓMO TIENE QUE SER)
+
+* **Usabilidad:** interfaz clara, botones con nombres entendibles (“Alta alumno”, “Tomar asistencia”, etc.).
+* **Portabilidad:** debería poder funcionar en cualquier PC con Python instalado.
+* **Persistencia:** todos los datos se guardan en SQLite (no se pierden al cerrar la app).
+* **Seguridad básica:**
+
+  * Cada profesor ve solo sus materias.
+  * Solo la preceptora puede:
+
+    * Dar de alta/baja alumnos.
+    * Crear usuarios.
+* **Respaldo:** se puede hacer copia de seguridad del archivo `.db`.
+
+---
+
+# 5. MODELO DE DATOS (TABLAS Y RELACIONES)
+
+Acá va la teoría de base de datos + cómo se aplica a tu caso.
+
+## 5.1. Conceptos básicos
+
+* **Tabla:** como una hoja de Excel con filas y columnas.
+* **Registro (fila):** un elemento concreto (un alumno, una nota, etc.).
+* **Campo (columna):** un dato de ese elemento (nombre, nota, fecha…).
+* **Clave primaria (PK):** columna que identifica de forma única cada fila.
+* **Clave foránea (FK):** columna que apunta a la PK de otra tabla.
+
+---
+
+## 5.2. Propuesta de tablas
+
+### 1) ALUMNOS
+
+Guarda los datos personales y estado general.
+
+Campos (ejemplo):
+
+* id_alumno (PK, entero)
+* nombre
+* apellido
+* dni
+* legajo
+* carrera
+* estado_alumno (ACTIVO / STANDBY / EGRESADO, etc.)
+
+**Ejemplo fila:**
+
+| id_alumno | nombre | apellido | dni      | legajo   | carrera            | estado_alumno |
+| --------- | ------ | -------- | -------- | -------- | ------------------ | ------------- |
+| 1         | Ana    | López    | 40123456 | 2023-001 | Tec. en Desarrollo | ACTIVO        |
+
+---
+
+### 2) MATERIAS
+
+* id_materia (PK)
+* nombre_materia
+* año (1, 2, 3)
+* carrera
+
+**Ejemplo fila:**
+
+| id_materia | nombre_materia  | año | carrera            |
+| ---------- | --------------- | --- | ------------------ |
+| 10         | Programación I  | 1   | Tec. en Desarrollo |
+| 20         | Programación II | 2   | Tec. en Desarrollo |
+
+---
+
+### 3) CORRELATIVAS
+
+Tabla que relaciona una materia con su requisito.
+
+* id_materia (FK → MATERIAS.id_materia)
+* id_materia_requisito (FK → MATERIAS.id_materia)
+* tipo_requisito (APROBADA, REGULAR, etc.)
+
+**Ejemplo fila:**
+
+| id_materia | id_materia_requisito | tipo_requisito |
+| ---------- | -------------------- | -------------- |
+| 20         | 10                   | APROBADA       |
+
+Significa:
+
+> Para cursar la materia 20 (Programación II), hay que tener aprobada la 10 (Programación I).
+
+---
+
+### 4) ALUMNOS_MATERIAS (Cursadas)
+
+Relación N a M: un alumno cursa muchas materias, y una materia tiene muchos alumnos.
+
+* id_alumno (FK → ALUMNOS)
+* id_materia (FK → MATERIAS)
+* estado_cursada (CURSANDO / REGULAR / LIBRE / PROMOCIONADA / APROBADA)
+
+**Ejemplo:**
+
+| id_alumno | id_materia | estado_cursada |
+| --------- | ---------- | -------------- |
+| 1         | 10         | REGULAR        |
+| 1         | 20         | CURSANDO       |
+| 2         | 10         | LIBRE          |
+
+---
+
+### 5) ASISTENCIAS
+
+* id_asistencia (PK)
+* id_alumno (FK → ALUMNOS)
+* id_materia (FK → MATERIAS)
+* fecha
+* estado_asistencia (PRESENTE / AUSENTE / JUSTIFICADO)
+
+**Ejemplo:**
+
+| id_asistencia | id_alumno | id_materia | fecha      | estado_asistencia |
+| ------------- | --------- | ---------- | ---------- | ----------------- |
+| 100           | 1         | 10         | 2025-03-01 | PRESENTE          |
+| 101           | 1         | 10         | 2025-03-02 | AUSENTE           |
+
+---
+
+### 6) NOTAS
+
+* id_nota (PK)
+* id_alumno (FK → ALUMNOS)
+* id_materia (FK → MATERIAS)
+* tipo_eval (Parcial1, Parcial2, Final, etc.)
+* nota (número)
+* fecha
+
+**Ejemplo:**
+
+| id_nota | id_alumno | id_materia | tipo_eval | nota | fecha      |
+| ------- | --------- | ---------- | --------- | ---- | ---------- |
+| 1       | 1         | 10         | Parcial1  | 8    | 2025-06-10 |
+| 2       | 1         | 10         | Parcial2  | 7    | 2025-07-01 |
+
+---
+
+### 7) PROFESORES
+
+* id_profesor (PK)
+* nombre
+* apellido
+* email (opcional)
+
+### 8) PROFESORES_MATERIAS
+
+Asigna qué profesor dicta qué materia.
+
+* id_profesor (FK → PROFESORES)
+* id_materia (FK → MATERIAS)
+
+---
+
+### 9) USUARIOS (para login)
+
+* id_usuario (PK)
+* nombre_usuario
+* contraseña   (idealmente guardada cifrada, pero teórico por ahora)
+* rol (PRECEPTOR / PROFESOR)
+* id_profesor (FK opcional, si el rol es PROFESOR, para saber quién es)
+
+**Ejemplo:**
+
+| id_usuario | nombre_usuario | contraseña | rol       | id_profesor |
+| ---------- | -------------- | ---------- | --------- | ----------- |
+| 1          | prece1         | *****      | PRECEPTOR | NULL        |
+| 2          | prof_prog1     | *****      | PROFESOR  | 5           |
+
+---
+
+# 6. REGLAS DE NEGOCIO (LÓGICA DEL SISTEMA)
+
+Estas son las “reglas” que tu sistema va a seguir. No es código, es lógica.
+
+## 6.1. ¿Cuándo un alumno debe materias?
+
+Ejemplo de definición:
+
+* Un alumno **debe** una materia si:
+
+  * La cursada está en estado LIBRE, o
+  * La cursada está en estado REGULAR pero el final no está aprobado, o
+  * Nunca la cursó.
+
+En la app, esto se calcula leyendo la tabla ALUMNOS_MATERIAS y NOTAS.
+
+---
+
+## 6.2. ¿Cuándo un alumno queda libre?
+
+Ejemplo de regla simple:
+
+* Si el alumno tiene **ausencias ≥ 25%** de las clases dictadas en esa materia, se marca la cursada como LIBRE.
+
+¿Cómo se hace conceptualmente?
+
+* Contás cuántas clases hubo (cantidad de registros ASISTENCIA para esa materia).
+* Contás cuántas AUSENTES tiene ese alumno en esa materia.
+* Calculás porcentaje.
+* Si supera el límite → cambiar `estado_cursada` en ALUMNOS_MATERIAS a LIBRE.
+
+---
+
+## 6.3. ¿Qué es “standby”?
+
+* STANDBY = el alumno dejó la carrera, pero no se lo borra.
+* Se conserva todo:
+
+  * Notas.
+  * Asistencias.
+  * Materias cursadas.
+* Solo se cambia `estado_alumno` en ALUMNOS.
+
+---
+
+## 6.4. ¿Cómo se usan las correlatividades?
+
+Regla general:
+
+> El sistema solo deja inscribir a un alumno en una materia si cumple con las correlativas definidas en CORRELATIVAS.
+
+Ejemplo:
+
+* Programación II requiere Programación I APROBADA.
+* Se mira en ALUMNOS_MATERIAS y NOTAS si Programación I está en estado APROBADA.
+* Si no → no se permite la inscripción.
+
+---
+
+# 7. ARQUITECTURA GENERAL DE LA APP
+
+A nivel conceptual, tenés 3 capas:
+
+1. **Interfaz gráfica (GUI)**
+
+   * Hecha con Qt Designer + PySide6 (o Tkinter).
+   * Pantallas: login, menú, gestión alumnos, asistencias, notas, etc.
+
+2. **Lógica de negocio**
+
+   * Funciones que hacen:
+
+     * Validar login.
+     * Calcular si queda libre.
+     * Calcular si debe materias.
+     * Decidir si se puede inscribir a una materia.
+
+3. **Acceso a datos (BD)**
+
+   * Funciones para hablar con SQLite:
+
+     * Agregar alumno.
+     * Modificar alumno.
+     * Registrar asistencia.
+     * Registrar nota.
+     * Consultar datos.
+
+---
+
+# 8. PANTALLAS PRINCIPALES (INTERFAZ)
+
+## 8.1. Pantalla de Login
+
+Elementos:
+
+* Campo usuario.
+* Campo contraseña.
+* Botón “Iniciar sesión”.
+* Mensaje si está mal.
+
+Flujo:
+
+1. El usuario ingresa usuario/contraseña.
+2. El sistema busca en USUARIOS.
+3. Si encuentra:
+
+   * Mira el `rol`.
+   * Si rol=PRECEPTOR → abre menú de preceptora.
+   * Si rol=PROFESOR → abre menú de profesor.
+4. Si no, muestra mensaje de error.
+
+---
+
+## 8.2. Menú Preceptora
+
+Opciones (botones, por ejemplo):
+
+* Gestión de alumnos.
+* Gestión de materias.
+* Gestión de correlativas.
+* Consulta de estado académico.
+* (Opcional) Gestión de usuarios.
+
+---
+
+### 8.2.1. Gestión de alumnos
+
+Pantalla:
+
+* Tabla con lista de alumnos (nombre, legajo, carrera, estado).
+* Filtros por carrera, estado, etc.
+* Botones:
+
+  * Alta alumno.
+  * Editar alumno.
+  * Pasar a STANDBY.
+
+Al hacer doble clic en un alumno → se abre la pantalla de **detalle del alumno**.
+
+---
+
+### 8.2.2. Detalle del alumno
+
+Pestañas (tabs) recomendadas:
+
+1. **Datos personales**
+2. **Materias / Cursadas**
+
+   * Lista de materias, estado cursada (CURSANDO, REGULAR, LIBRE, APROBADA).
+3. **Asistencias**
+
+   * Tabla con asistencias por materia.
+4. **Notas**
+
+   * Notas por materia y evaluación.
+5. **Estado académico**
+
+   * Listado de materias que debe.
+   * Indicador si está libre en alguna.
+   * Resumen de correlativas pendientes.
+
+---
+
+## 8.3. Menú Profesor
+
+Opciones:
+
+* Mis materias.
+* Tomar asistencia.
+* Cargar notas.
+
+Flujo:
+
+1. El profesor ve la lista de materias que dicta (leer de PROFESORES_MATERIAS).
+2. Selecciona una materia.
+3. Puede:
+
+   * Tomar asistencia (de ese día).
+   * Cargar notas de un parcial.
+
+---
+
+### 8.3.1. Pantalla “Tomar asistencia”
+
+* Selecciona materia y fecha.
+* Se muestra la lista de alumnos.
+* Para cada alumno: un combo o botón:
+
+  * PRESENTE / AUSENTE / JUSTIFICADO.
+* Botón “Guardar”.
+
+---
+
+### 8.3.2. Pantalla “Cargar notas”
+
+* Selecciona materia.
+* Selecciona tipo de evaluación (Parcial 1, Recuperatorio…).
+* Lista de alumnos.
+* Para cada alumno: cuadro para escribir la nota.
+* Botón “Guardar”.
+
+---
+
+# 9. OPERACIONES CRUD (CONCEPTUAL)
+
+CRUD = Create, Read, Update, Delete
+(Crear, Leer, Actualizar, Eliminar)
+
+En tu app, para cada módulo:
+
+## 9.1. Alumnos
+
+* **Crear:** Alta alumno.
+* **Leer:** Listado de alumnos, detalle de un alumno.
+* **Actualizar:** Modificar datos, cambiar estado (ACTIVO/STANDBY).
+* **Eliminar:** En tu caso, no se elimina de la BD, solo se cambia el estado.
+
+## 9.2. Materias
+
+* **Crear:** Nueva materia.
+* **Leer:** Ver lista de materias.
+* **Actualizar:** Modificar datos (nombre, año).
+* **Eliminar:** Podés decidir si dejás eliminar o no (cuidado si ya tiene registros ligados).
+
+## 9.3. Asistencias
+
+* **Crear:** Registrar asistencia nueva para una clase.
+* **Leer:** Ver historial de asistencias.
+* **Actualizar:** Corregir un error (cambiar AUSENTE por JUSTIFICADO).
+* **Eliminar:** Borrar una asistencia errónea (poco frecuente).
+
+## 9.4. Notas
+
+* **Crear:** Cargar una nueva nota.
+* **Leer:** Ver notas del alumno o de una materia.
+* **Actualizar:** Corregir una nota mal cargada.
+* **Eliminar:** Borrar una nota que no corresponde.
+
+## 9.5. Usuarios
+
+* **Crear:** Crear usuario nuevo (por la preceptora).
+* **Leer:** Ver lista de usuarios.
+* **Actualizar:** Cambiar contraseña, cambiar rol.
+* **Eliminar:** Dar de baja un usuario (por ejemplo, profesor que se fue).
+
+---
+
+# 10. PLAN DE TRABAJO (FASES)
+
+Para que no te abrumes, una manera ordenada de hacerlo:
+
+1. **Fase 0 – Diseño en papel**
+
+   * Definir bien tablas y relaciones (lo que acabamos de hacer).
+   * Definir reglas de negocio (libre, debe materias, correlativas).
+
+2. **Fase 1 – Base de datos**
+
+   * Crear las tablas en SQLite (conceptualmente, sin aún conectarlo a Python).
+   * Cargar algunos datos de prueba (alumnos, materias).
+
+3. **Fase 2 – Interfaz**
+
+   * Diseñar en Qt Designer las ventanas:
+
+     * Login.
+     * Menú preceptora.
+     * Menú profesor.
+     * Pantallas de alumnos, asistencias, notas.
+   * Sin lógica al principio, solo maquetas.
+
+4. **Fase 3 – Conexión básica**
+
+   * Conectar login a la BD.
+   * Mostrar listado de alumnos en la pantalla de gestión.
+
+5. **Fase 4 – Módulos clave**
+
+   * Agregar / editar alumnos.
+   * Tomar asistencia.
+   * Cargar notas.
+
+6. **Fase 5 – Lógica avanzada**
+
+   * Cálculo automático de “libre”.
+   * Cálculo de “debe materias”.
+   * Validación de correlatividades.
+
+---
+
+Hasta acá tenés:
+
+* Los **actores** (prece y profes).
+* Los **requisitos** (qué tiene que hacer).
+* El **modelo de datos** (tablas, PK, FK, relaciones).
+* Las **reglas de negocio** (libre, debe, standby, correlativas).
+* Las **pantallas** principales de la app.
+* Un **plan de trabajo** por fases.
+
+---------------------------------------------------------------------------------------
+
+Orden de importancia
+
+Modelo de datos (base de datos, tablas, relaciones)
+
+Reglas de la "app": Qué significa “quedó libre”, “debe materias”, “standby”, correlativas, etc.
+
+Operaciones que tiene que hacer el sistema (CRUD): Qué acciones concretas hay: cargar asistencia, ver notas, dar de alta un alumno, etc.
+
+Login y roles (preceptora vs profesor): Quién puede hacer qué.
+
+Interfaz gráfica (pantallas y flujo) : Cómo ven y usan eso preceptora y profes.
+
+Herramientas específicas (PySide6, Qt Designer, etc.): Cómo implementarlo en Python, recién después.
+Perfecto, entonces lo ordenamos y arrancamos 💪
+
+Voy a hacer dos cosas:
+
+1. Decirte **qué partes del proyecto son más importantes y en qué orden** las vamos a ver.
+2. Empezar **ya** con la parte más importante (modelo de datos), con teoría + ejemplos tuyos, sin código.
+
+---
+
+## 1. Orden de importancia para tu proyecto
+
+Para que tu app exista y tenga sentido, lo crítico es esto:
+
+1. **Modelo de datos (base de datos, tablas, relaciones)**
+   👉 Es el corazón de todo. Si esto está mal, TODO lo demás se complica.
+2. **Reglas de negocio**
+   👉 Qué significa “quedó libre”, “debe materias”, “standby”, correlativas, etc.
+3. **Operaciones que tiene que hacer el sistema (casos de uso / CRUD)**
+   👉 Qué acciones concretas hay: cargar asistencia, ver notas, dar de alta un alumno, etc.
+4. **Login y roles (preceptora vs profesor)**
+   👉 Quién puede hacer qué.
+5. **Interfaz gráfica (pantallas y flujo)**
+   👉 Cómo ven y usan eso preceptora y profes.
+6. **Herramientas específicas (PySide6, Qt Designer, etc.)**
+   👉 Cómo implementarlo en Python, recién después.
+
+Ahora arrancamos con el **Punto 1: Modelo de datos**
+Te lo explico como teoría general y TODO aterrizado en TU app.
+
+---
+
+## 2. Modelo de datos – qué es y por qué te importa
+
+### 2.1. ¿Qué es un modelo de datos?
+
+Es una forma ordenada de contestar:
+
+> “¿Qué cosas quiero guardar y cómo se relacionan entre sí?”
+
+En una base de datos relacional (SQLite, MySQL, etc.) eso se representa con:
+
+* **Tablas** → como hojas de Excel.
+* **Filas (registros)** → cada “objeto” concreto (un alumno, una nota, una asistencia).
+* **Columnas (campos)** → los datos de ese objeto (nombre, fecha, nota, etc.).
+* **Relaciones** → cómo se conectan las tablas entre sí.
+
+En tu caso, las “cosas” importantes son:
+
+* Alumnos
+* Materias
+* Cursadas de los alumnos
+* Asistencias
+* Notas
+* Profesores
+* Usuarios (para login)
+* Correlatividades entre materias
+
+---
+
+### 2.2. Conceptos clave: PK y FK
+
+#### Clave primaria (PK)
+
+* Es una columna (o conjunto de columnas) que **identifica de forma única** a cada fila.
+* No se repite.
+* No es nula.
+
+Ejemplo en tu tabla ALUMNOS:
+
+| id_alumno (PK) | nombre | apellido |
+| -------------- | ------ | -------- |
+| 1              | Ana    | López    |
+| 2              | Pedro  | Gómez    |
+
+* `id_alumno` es la PK: si digo “alumno 2”, es SIEMPRE Pedro Gómez.
+
+💡 **¿Por qué no usar DNI como PK?**
+Porque puede haber casos raros, cambios, errores, y además una PK numérica interna es más prolija y más fácil de usar en otras tablas.
+
+---
+
+#### Clave foránea (FK)
+
+* Es una columna que **apunta a la PK de otra tabla**.
+* Une cosas: conecta registros de distintas tablas.
+
+Ejemplo típico en tu app: tabla NOTAS
+
+| id_nota | id_alumno (FK) | id_materia (FK) | tipo_eval | nota |
+| ------- | -------------- | --------------- | --------- | ---- |
+| 1       | 1              | 10              | Parcial1  | 8    |
+| 2       | 1              | 12              | Parcial1  | 9    |
+
+* `id_alumno` apunta a `ALUMNOS.id_alumno`.
+* `id_materia` apunta a `MATERIAS.id_materia`.
+
+Eso significa:
+
+> “La nota 1 es de Ana (id_alumno=1) en Programación I (id_materia=10)”.
+
+---
+
+### 2.3. Tipos de relaciones (muy importante)
+
+#### 1 a N (uno a muchos)
+
+Un alumno puede tener **muchas** asistencias.
+
+* Un alumno → muchas filas en ASISTENCIAS.
+* Cada fila de ASISTENCIAS → un solo alumno.
+
+Ejemplo:
+
+**ALUMNOS**
+
+| id_alumno | nombre |
+| --------- | ------ |
+| 1         | Ana    |
+
+**ASISTENCIAS**
+
+| id_asistencia | id_alumno (FK) | fecha      | id_materia | estado   |
+| ------------- | -------------- | ---------- | ---------- | -------- |
+| 100           | 1              | 2025-03-01 | 10         | Presente |
+| 101           | 1              | 2025-03-02 | 10         | Ausente  |
+
+---
+
+#### N a M (muchos a muchos)
+
+Un alumno cursa muchas materias
+y una materia la cursan muchos alumnos.
+
+Eso se resuelve con una **tabla intermedia**.
+
+**ALUMNOS**
+
+| id_alumno | nombre |
+| --------- | ------ |
+| 1         | Ana    |
+| 2         | Pedro  |
+
+**MATERIAS**
+
+| id_materia | nombre_materia |
+| ---------- | -------------- |
+| 10         | Programación I |
+| 12         | Matemática I   |
+
+**ALUMNOS_MATERIAS** (intermedia)
+
+| id_alumno (FK) | id_materia (FK) | estado_cursada |
+| -------------- | --------------- | -------------- |
+| 1              | 10              | REGULAR        |
+| 1              | 12              | CURSANDO       |
+| 2              | 10              | LIBRE          |
+
+* Ana está en Programación I y Matemática I.
+* Programación I tiene a Ana y a Pedro.
+
+Esto en tu sistema es clave para:
+
+* Ver qué materias cursa cada alumno.
+* Saber dónde tomar asistencia.
+* Saber para qué materias cargar notas.
+
+---
+
+## 3. Qué tablas son ESENCIALES para tu app
+
+Voy a marcar las **prioritarias** (si tuvieras que elegir pocas):
+
+1. **ALUMNOS**
+2. **MATERIAS**
+3. **ALUMNOS_MATERIAS** (cursadas)
+4. **ASISTENCIAS**
+5. **NOTAS**
+6. **USUARIOS** (login)
+7. **PROFESORES** y **PROFESORES_MATERIAS**
+8. **CORRELATIVAS** (para requisitos entre materias)
+
+Te las describo una por una, con qué responde cada una.
+
+---
+
+### 3.1. ALUMNOS
+
+**Qué representa:**
+Cada alumno de la carrera.
+
+**Campos importantes (concepto):**
+
+* id_alumno (PK)
+* nombre
+* apellido
+* dni
+* legajo
+* carrera
+* estado_alumno (ACTIVO / STANDBY / EGRESADO, etc.)
+
+**¿Qué preguntas del sistema responde esta tabla?**
+
+* “¿Quién es este alumno?” → nombre, apellido, legajo.
+* “¿Sigue cursando o dejó la carrera?” → estado_alumno.
+
+Ejemplo de registros:
+
+| id_alumno | nombre | apellido | estado_alumno |
+| --------- | ------ | -------- | ------------- |
+| 1         | Ana    | López    | ACTIVO        |
+| 2         | Juan   | Pérez    | STANDBY       |
+
+Juan Pérez dejó la carrera → no se borra, solo pasa a STANDBY.
+
+---
+
+### 3.2. MATERIAS
+
+**Qué representa:**
+Cada materia de la carrera.
+
+**Campos:**
+
+* id_materia (PK)
+* nombre_materia
+* año
+* carrera
+
+**Preguntas que responde:**
+
+* “¿Qué materias existen en esta carrera?”
+* “¿A qué año pertenece esta materia?”
+
+Ejemplo:
+
+| id_materia | nombre_materia  | año |
+| ---------- | --------------- | --- |
+| 10         | Programación I  | 1   |
+| 20         | Programación II | 2   |
+
+---
+
+### 3.3. ALUMNOS_MATERIAS (cursadas)
+
+**Qué representa:**
+En qué materias está (o estuvo) cada alumno y cómo va en esa cursada.
+
+**Campos:**
+
+* id_alumno (FK → ALUMNOS)
+* id_materia (FK → MATERIAS)
+* estado_cursada (CURSANDO / REGULAR / LIBRE / PROMOCIONADA / APROBADA)
+
+**Preguntas que responde:**
+
+* “¿En qué materias está anotado este alumno?”
+* “¿En qué estado está su cursada?”
+* “¿Debe materias?” (si estado no es APROBADA, o según tu regla)
+
+Ejemplo:
+
+| id_alumno | id_materia | estado_cursada |
+| --------- | ---------- | -------------- |
+| 1         | 10         | REGULAR        |
+| 1         | 20         | CURSANDO       |
+| 2         | 10         | LIBRE          |
+
+* Alumno 1 (Ana) tiene:
+
+  * Programación I → REGULAR
+  * Programación II → CURSANDO
+* Alumno 2 (Pedro) está LIBRE en Programación I → la “debe”.
+
+---
+
+### 3.4. ASISTENCIAS
+
+**Qué representa:**
+Cada vez que un alumno fue presente/ausente en una clase de una materia.
+
+**Campos:**
+
+* id_asistencia (PK)
+* id_alumno (FK)
+* id_materia (FK)
+* fecha
+* estado_asistencia (PRESENTE / AUSENTE / JUSTIFICADO)
+
+**Preguntas que responde:**
+
+* “¿Cuántas asistencias tiene un alumno en general?”
+* “¿Cuántas asistencias tiene en Programación I?”
+* “¿Quedó libre en esa materia por faltas?”
+
+Ejemplo:
+
+| id_asistencia | id_alumno | id_materia | fecha      | estado_asistencia |
+| ------------- | --------- | ---------- | ---------- | ----------------- |
+| 100           | 1         | 10         | 2025-03-01 | PRESENTE          |
+| 101           | 1         | 10         | 2025-03-02 | AUSENTE           |
+| 102           | 1         | 20         | 2025-03-03 | PRESENTE          |
+
+---
+
+### 3.5. NOTAS
+
+**Qué representa:**
+Cada nota que obtuvo el alumno en una materia.
+
+**Campos:**
+
+* id_nota (PK)
+* id_alumno (FK)
+* id_materia (FK)
+* tipo_eval (Parcial1, Parcial2, Final…)
+* nota
+* fecha
+
+**Preguntas que responde:**
+
+* “¿Qué notas tiene el alumno en cada materia?”
+* “¿Cuál es el promedio para esta materia?”
+* “¿Promocionó / aprobó / debe?”
+
+Ejemplo:
+
+| id_nota | id_alumno | id_materia | tipo_eval | nota |
+| ------- | --------- | ---------- | --------- | ---- |
+| 1       | 1         | 10         | Parcial1  | 8    |
+| 2       | 1         | 10         | Parcial2  | 7    |
+
+---
+
+### 3.6. PROFESORES y PROFESORES_MATERIAS
+
+**PROFESORES**
+
+* id_profesor (PK)
+* nombre
+* apellido
+
+**PROFESORES_MATERIAS**
+
+* id_profesor (FK)
+* id_materia (FK)
+
+**Preguntas que responde:**
+
+* “¿Qué materias dicta cada profesor?”
+* “¿Qué profesor dicta esta materia?”
+
+Esto se usa sobre todo para el panel de profesor: mostrarle solo sus materias.
+
+---
+
+### 3.7. USUARIOS (para login)
+
+**Qué representa:**
+Quién puede entrar a la app y con qué rol.
+
+**Campos:**
+
+* id_usuario (PK)
+* nombre_usuario
+* contraseña
+* rol (PRECEPTOR / PROFESOR)
+* id_profesor (FK, si el rol es PROFESOR)
+
+**Preguntas que responde:**
+
+* “¿Este usuario es válido?”
+* “¿Es preceptora o profesor?”
+* “Si es profesor, a qué profesor corresponde?”
+
+---
+
+### 3.8. CORRELATIVAS
+
+**Qué representa:**
+Qué materias son requisito de otras.
+
+**Campos:**
+
+* id_materia (FK) → la materia que querés cursar.
+* id_materia_requisito (FK) → la materia que tenés que tener antes.
+* tipo_requisito (APROBADA, REGULAR, etc.)
+
+**Preguntas que responde:**
+
+* “¿Puede inscribirse a esta materia?”
+* “¿Qué correlativas le faltan?”
+
+Ejemplo:
+
+| id_materia | id_materia_requisito | tipo_requisito |
+| ---------- | -------------------- | -------------- |
+| 20         | 10                   | APROBADA       |
+
+> Para cursar Programación II (20), hay que tener Programación I (10) aprobada.
+
+---
+
+## 4. Cómo estas tablas responden a lo que vos querés
+
+Voy a agarrar tus necesidades una por una:
+
+> “Saber qué alumno es”
+> → Tabla: **ALUMNOS** (nombre, apellido, legajo, etc.)
+
+> “Cuántas asistencias tiene en general”
+> → Tabla: **ASISTENCIAS**, contando todas las filas de ese id_alumno.
+
+> “Cuántas asistencias tiene en cada materia por separado”
+> → ASISTENCIAS filtrando por id_alumno + id_materia.
+
+> “Las notas de cada materia”
+> → **NOTAS** filtrando por id_alumno + id_materia.
+
+> “Si una materia es correlativa o no”
+> → Tabla **CORRELATIVAS**, relacionada con **MATERIAS**.
+
+> “Si el alumno debe materias”
+> → Tabla **ALUMNOS_MATERIAS** (estado_cursada) + reglas de negocio.
+> Si la cursada está LIBRE o no APROBADA → la debe.
+
+> “Si el alumno quedó libre”
+> → estado_cursada = LIBRE en ALUMNOS_MATERIAS, calculado a partir de ASISTENCIAS.
+
+> “Agregar o dar de baja un alumno”
+> → ALUMNOS: crear un nuevo registro (alta) o cambiar estado_alumno a STANDBY (baja administrativa).
+
+> “Alumno en standby (dejó la carrera pero no se borra)”
+> → Solo cambiar `estado_alumno` en **ALUMNOS** → STANDBY.
+
+> “Login profe vs prece”
+> → **USUARIOS** (rol) + relación con **PROFESORES** para saber qué materias ve.
+
+---
+
+## 5. Qué te falta saber de este bloque (teoría pura)
+
+Para dominar **modelo de datos** de tu app tenés que manejar bien:
+
+1. **Qué es una tabla, registro y campo** (eso ya casi lo tenés).
+2. **Clave primaria (PK)**:
+
+   * Qué es.
+   * Por qué conviene usar un id numérico.
+3. **Clave foránea (FK)**:
+
+   * Cómo conecta tablas.
+   * Relación 1 a N y N a M.
+4. **Tablas intermedias** para relaciones N a M:
+
+   * ALUMNOS_MATERIAS.
+   * PROFESORES_MATERIAS.
+5. **Diseño mínimo para tu app**:
+
+   * ALUMNOS, MATERIAS, ALUMNOS_MATERIAS, ASISTENCIAS, NOTAS, USUARIOS, PROFESORES, CORRELATIVAS.
+6. **Cómo cada pregunta que querés responder** (asistencias, notas, libres, etc.) se apoya en una o varias tablas.
+
+---
+
+Si querés seguir **en orden de importancia**, el siguiente bloque natural sería:
+
+> **Reglas de negocio**:
+> — cuándo queda libre, cuándo debe materias, cómo se usan las correlativas, etc.
+
+Ahí ya no hablamos de tablas nuevas, sino de **cómo usar los datos de estas tablas para decidir cosas**.
+
+En el próximo mensaje puedo tomar esas reglas UNA POR UNA y explicarlas con ejemplos usando las tablas que acabamos de definir.
